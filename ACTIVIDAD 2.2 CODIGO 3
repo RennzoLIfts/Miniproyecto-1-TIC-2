@@ -1,0 +1,91 @@
+import numpy as np
+
+
+class ZombieGame:
+    def __init__(self, size=(100, 100)):
+        self.size = size
+        self.state = np.random.choice([0, 1, 2], size=size, p=[0.2, 0.6, 0.2])
+        self.life = np.random.randint(50, 201, size=size)
+
+    def step(self):
+        new_state = self.state.copy()
+        new_life = self.life.copy()
+
+        for i in range(self.size[0]):
+            for j in range(self.size[1]):
+                s = self.state[i, j]
+                v = self.life[i, j]
+                neighbors = self.get_neighbors(i, j)
+                zombies = np.sum(neighbors == 0)
+                vivos = np.sum(neighbors == 1)
+
+                if s == 1:  # Persona viva
+                    v -= 1
+                    if zombies > 0:
+                        v -= 10
+                    if v < 100 and np.random.rand() < 0.05:
+                        v += 20
+                    if v <= 0:
+                        new_state[i, j] = 2
+                        v = 0
+
+                elif s == 0:  # Zombie
+                    v -= 0.5
+                    if vivos >= 2:
+                        v += 5
+                    if v <= 0:
+                        new_state[i, j] = 2
+                        v = 0
+
+                elif s == 2:  # Muerto
+                    if zombies >= 3 and np.random.rand() < 0.5:
+                        new_state[i, j] = 0
+                        v = 100
+                    elif vivos >= 4:
+                        new_state[i, j] = 1
+                        v = 150
+
+                new_life[i, j] = int(np.clip(v, 0, 200))
+
+        self.state = new_state
+        self.life = new_life
+
+    def get_neighbors(self, x, y):
+        neighbors = []
+        for dx in [-1, 0, 1]:
+            for dy in [-1, 0, 1]:
+                if dx == 0 and dy == 0:
+                    continue
+                ni = (x + dx) % self.size[0]
+                nj = (y + dy) % self.size[1]
+                neighbors.append(self.state[ni, nj])
+        return np.array(neighbors)
+
+    def reset(self):
+        self.state = np.random.choice(
+            [0, 1, 2], size=self.size, p=[0.2, 0.6, 0.2])
+        self.life = np.random.randint(50, 201, size=self.size)
+
+    # Eventos especiales
+    def evento_infeccion_masiva(self):
+        mask = np.random.rand(*self.size) < 0.1
+        self.state[mask] = 0
+        self.life[mask] = 100
+
+    def evento_pulsar_mutante(self):
+        mask = self.state == 0
+        self.life[mask] = np.minimum(self.life[mask] + 50, 200)
+
+    def evento_ritual_purificacion(self):
+        for i in range(self.size[0]):
+            for j in range(self.size[1]):
+                if self.state[i, j] == 0:
+                    vecinos = self.get_neighbors(i, j)
+                    if np.sum(vecinos == 1) >= 3:
+                        self.state[i, j] = 2
+                        self.life[i, j] = 0
+
+    def evento_atomic(self):
+        cx, cy = self.size[0] // 2, self.size[1] // 2
+        self.state[cx-5:cx+5, cy-5:cy+5] = 2
+        self.life[cx-5:cx+5, cy-5:cy+5] = 0
