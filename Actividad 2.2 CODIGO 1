@@ -1,0 +1,97 @@
+import sys
+import time
+import numpy as np
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
+from PyQt6.QtCore import QTimer
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+
+from juegozombies import ZombieGame
+from serialarduino2 import SerialHandler
+
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Invasión Zombie - Taller TIC II")
+        self.game = ZombieGame()
+        # Cambia el puerto si es necesario
+        self.serial = SerialHandler(port='COM3')
+        self.serial.set_callback(self.handle_serial)
+
+        self.figure = Figure()
+        self.canvas = FigureCanvas(self.figure)
+        self.ax = self.figure.add_subplot(111)
+
+        central = QWidget()
+        layout = QVBoxLayout(central)
+        layout.addWidget(self.canvas)
+        self.setCentralWidget(central)
+
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_simulation)
+        self.timer.start(100)
+
+        self.last_send = time.time()
+
+    def update_simulation(self):
+        self.game.step()
+        self.draw_grid()
+
+        if time.time() - self.last_send > 10:
+            zombies = int(np.sum(self.game.state == 0))
+            self.serial.send(zombies)
+            self.last_send = time.time()
+
+        self.check_game_end()
+
+    def draw_grid(self):
+        grid_rgb = np.zeros((*self.game.state.shape, 3))
+
+        grid_rgb[self.game.state == 0] = [1, 0, 0]      # zombie = rojo
+        grid_rgb[self.game.state == 1] = [0, 1, 0]      # persona = verde
+        grid_rgb[self.game.state == 2] = [0.3, 0.3, 0.3]  # muerto = gris
+
+        self.ax.clear()
+        self.ax.imshow(grid_rgb, interpolation='nearest')
+        self.ax.axis('off')
+        self.canvas.draw()
+
+    def handle_serial(self, message):
+        print(f"[Arduino] {message}")
+        if message.lower() == 'r':
+            self.game.reset()
+        elif message.startswith("a-"):
+            evento = int(message.split("-")[1])
+            if evento == 1:
+                self.game.evento_infeccion_masiva()
+            elif evento == 2:
+                self.game.evento_pulsar_mutante()
+            elif evento == 3:
+                self.game.evento_ritual_purificacion()
+            elif evento == 4:
+                self.game.evento_atomic()
+
+    def check_game_end(self):
+        total = self.game.state.size
+        zombies = np.sum(self.game.state == 0)
+        personas = np.sum(self.game.state == 1)
+
+        if zombies == total:
+            print("💀 DERROTA: Todos zombis.")
+            self.game.reset()
+        elif personas == total:
+            print("🧠 VICTORIA: Todos humanos.")
+            self.game.reset()
+
+    def closeEvent(self, event):
+        self.serial.close()
+        event.accept()
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
+
