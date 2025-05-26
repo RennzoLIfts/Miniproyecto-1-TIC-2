@@ -1,0 +1,29 @@
+import serial
+import threading
+
+
+class SerialHandler:
+    def __init__(self, port='COM3', baudrate=9600):
+        self.ser = serial.Serial(port, baudrate, timeout=1)
+        self.read_callback = None
+        self.running = True
+        self.thread = threading.Thread(target=self.read_loop)
+        self.thread.start()
+
+    def read_loop(self):
+        while self.running:
+            if self.ser.in_waiting > 0:
+                line = self.ser.readline().decode().strip()
+                if self.read_callback:
+                    self.read_callback(line)
+
+    def send(self, message):
+        self.ser.write((str(message) + '\n').encode())
+
+    def set_callback(self, callback):
+        self.read_callback = callback
+
+    def close(self):
+        self.running = False
+        self.thread.join()
+        self.ser.close()
