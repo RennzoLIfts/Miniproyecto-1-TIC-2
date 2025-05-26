@@ -1,0 +1,60 @@
+import sys
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
+from PyQt6.QtCore import QTimer
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+from juegomain import GameOfLife
+from serialarduino import SerialHandler
+import time
+
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Game of Life - Taller TIC II")
+        self.game = GameOfLife()
+        self.serial = SerialHandler(port='COM3')  # Cambia COM3 por tu puerto
+        self.serial.set_callback(self.handle_serial)
+
+        self.figure = Figure()
+        self.canvas = FigureCanvas(self.figure)
+        self.ax = self.figure.add_subplot(111)
+
+        central = QWidget()
+        layout = QVBoxLayout(central)
+        layout.addWidget(self.canvas)
+        self.setCentralWidget(central)
+
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_simulation)
+        self.timer.start(100)  # cada 100 ms
+
+        self.last_send = time.time()
+
+    def update_simulation(self):
+        self.game.step()
+        self.ax.clear()
+        self.ax.imshow(self.game.grid, cmap='Greys', interpolation='nearest')
+        self.ax.axis('off')
+        self.canvas.draw()
+
+        if time.time() - self.last_send > 10:
+            alive = self.game.count_alive()
+            self.serial.send(alive)
+            self.last_send = time.time()
+
+    def handle_serial(self, message):
+        print(f"[Arduino] {message}")
+        if message.lower() == 'r':
+            self.game.reset()
+
+    def closeEvent(self, event):
+        self.serial.close()
+        event.accept()
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
