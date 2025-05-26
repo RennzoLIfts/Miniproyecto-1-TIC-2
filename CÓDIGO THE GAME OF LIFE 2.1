@@ -1,1 +1,20 @@
+import numpy as np
+from scipy.signal import convolve2d
 
+
+class GameOfLife:
+    def __init__(self, size=(100, 100)):
+        self.size = size
+        self.grid = np.random.randint(0, 2, size)
+
+    def step(self):
+        kernel = np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]])
+        neighbors = convolve2d(self.grid, kernel, mode='same', boundary='wrap')
+        self.grid = ((neighbors == 3) | (
+            (self.grid == 1) & (neighbors == 2))).astype(int)
+
+    def reset(self):
+        self.grid = np.random.randint(0, 2, self.size)
+
+    def count_alive(self):
+        return int(np.sum(self.grid))
