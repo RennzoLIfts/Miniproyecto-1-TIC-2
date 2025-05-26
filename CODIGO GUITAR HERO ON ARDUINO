@@ -1,1 +1,182 @@
+// Guitar Hero Arduino - MiniProyecto 1 - UdeC
 
+
+const int NUM_NOTAS = 5;
+const int buzzerPin = 13;
+const int ledPins[NUM_NOTAS] = {5,4,3,2,6};
+const int buttonPins[NUM_NOTAS] = {12,11,10,9,8}; 
+
+#define NOTE_C4 262
+#define NOTE_D4 294
+#define NOTE_E4 330
+#define NOTE_F4 349
+#define NOTE_G4 392
+#define NOTE_A4 440
+#define NOTE_B4 494
+#define NOTE_C5 523
+#define NOTE_D5 587
+
+const int DIFICULTADES = 5;
+const int TIEMPOS_REACCION[DIFICULTADES] = {2000, 1500, 1000, 850, 500}; // medido en ms
+
+int dificultad = 2; // Valor por defecto: Medio (1.0s)
+int puntos = 25;
+int racha = 0;
+int multiplicador = 1;
+
+// Canciones (nota, duracion)
+int starWarsNotas[] = {NOTE_A4, NOTE_A4, NOTE_F4, NOTE_C5, NOTE_A4, NOTE_F4, NOTE_C5, NOTE_A4};
+int starWarsTiempos[] = {500, 500, 350, 150, 500, 350, 150, 650};
+
+int nuncaMeFaltesNotas[] = {NOTE_E4, NOTE_E4, NOTE_F4, NOTE_G4, NOTE_G4, NOTE_F4, NOTE_E4, NOTE_D4};
+int nuncaMeFaltesTiempos[] = {500, 250, 250, 500, 250, 250, 500, 500};
+
+int duelFatesNotas[] = {NOTE_E4, NOTE_E4, NOTE_E4, NOTE_G4, NOTE_E4, NOTE_E4, NOTE_E4, NOTE_B4};
+int duelFatesTiempos[] = {300, 300, 300, 500, 300, 300, 300, 700};
+
+void setup() {
+  Serial.begin(9600);
+  for (int i = 0; i < NUM_NOTAS; i++) {
+    pinMode(ledPins[i], OUTPUT);
+    pinMode(buttonPins[i], INPUT_PULLUP);
+  }
+  mostrarMenu();
+}
+
+void loop() {
+  if (Serial.available()) {
+    char opcion = Serial.read();
+    if (opcion == '1' || opcion == '2' || opcion == '3') {
+      int cancion = opcion - '1';
+      seleccionarDificultad();
+      iniciarJuego(cancion);
+    }
+  }
+}
+
+void mostrarMenu() {  
+  Serial.println("\n=== Guitar Hero Arduino ===");
+  Serial.println("Selecciona una cancion:");
+  Serial.println("1. Star Wars");
+  Serial.println("2. Nunca me faltes");
+  Serial.println("3. Duel of the Fates (Star Wars)");
+  Serial.print("Ingresa 1, 2 o 3: ");
+}
+
+void seleccionarDificultad() {
+    Serial.println("\nSelecciona dificultad:");
+    Serial.println("1. Muy Facil (2.0s)");
+    Serial.println("2. Facil (1.5s)");
+    Serial.println("3. Medio (1.0s)");
+    Serial.println("4. Dificil (0.7s)");
+    Serial.println("5. Experto (0.5s)");
+    
+    while (!Serial.available());
+    char dif = Serial.read();
+    int nuevaDif = dif - '0';
+    
+    // Validación de entrada
+    if(nuevaDif >= 1 && nuevaDif <= 5) {
+        dificultad = nuevaDif;
+        Serial.print("Dificultad establecida: ");
+        switch(dificultad) {
+            case 1: Serial.println("Muy Facil"); break;
+            case 2: Serial.println("Facil"); break;
+            case 3: Serial.println("Medio"); break;
+            case 4: Serial.println("Dificil"); break;
+            case 5: Serial.println("Experto"); break;
+        }
+    } else {
+        Serial.println("Opcion invalida, usando dificultad Media por defecto");
+        dificultad = 3; // Medio por defecto
+    }
+}
+
+
+void iniciarJuego(int seleccion) {
+    int* notas;
+    int* tiempos;
+    int tam = 8;
+    switch (seleccion) {
+        case 0: notas = starWarsNotas; tiempos = starWarsTiempos; break;
+        case 1: notas = nuncaMeFaltesNotas; tiempos = nuncaMeFaltesTiempos; break;
+        case 2: notas = duelFatesNotas; tiempos = duelFatesTiempos; break;
+    }
+
+    puntos = 25;
+    racha = 0;
+    multiplicador = 1;
+    Serial.println("\nInicia la cancion! Sigue los LEDs:");
+
+    for (int i = 0; i < tam; i++) {
+        int nota = notas[i];
+        int duracionNota = tiempos[i];
+        int tiempoReaccion = TIEMPOS_REACCION[dificultad-1]; // Obtener tiempo según dificultad
+        int ledIndex = i % NUM_NOTAS;
+
+        tone(buzzerPin, nota, duracionNota);
+        digitalWrite(ledPins[ledIndex], HIGH);
+
+        unsigned long tInicio = millis();
+        bool acierto = false;
+        
+        // Ventana de tiempo para presionar el botón
+        while (millis() - tInicio < tiempoReaccion) {
+            if (digitalRead(buttonPins[ledIndex]) == LOW) {
+                acierto = true;
+                break; // Salir si se presionó el correcto
+            }
+            
+            // Verificar si se presionó algún botón incorrecto
+            for (int j = 0; j < NUM_NOTAS; j++) {
+                if (j != ledIndex && digitalRead(buttonPins[j]) == LOW) {
+                    acierto = false;
+                    break;
+                }
+            }
+        }
+
+        digitalWrite(ledPins[ledIndex], LOW);
+
+        // Sistema de puntuación mejorado
+        if (acierto) {
+            racha++;
+            // Ajustar multiplicadores según dificultad
+            if (dificultad >= 4) { // Dificil o Experto
+                if (racha == 3) multiplicador = 2;
+                if (racha == 6) multiplicador = 4;
+                if (racha == 9) multiplicador = 8;
+            } else {
+                if (racha == 5) multiplicador = 2;
+                if (racha == 10) multiplicador = 4;
+                if (racha == 15) multiplicador = 8;
+            }
+            
+            puntos += 10 * multiplicador;
+            Serial.print("¡Correcto! +");
+            Serial.print(10 * multiplicador);
+            Serial.print(" Puntos (Racha: ");
+            Serial.print(racha);
+            Serial.println(")");
+        } else {
+            racha = 0;
+            multiplicador = 1;
+            int penalizacion = dificultad * 2.5; // Penalización mayor en dificultades altas
+            puntos -= penalizacion;
+            Serial.print("¡Fallaste! -");
+            Serial.print(penalizacion);
+            Serial.println(" Puntos");
+        }
+
+        delay(duracionNota);
+
+        if (puntos <= 0) {
+            Serial.println("GAME OVER: puntaje agotado.");
+            break;
+        }
+    }
+
+    Serial.print("\nJuego terminado. Puntaje final: ");
+    Serial.println(puntos);
+    mostrarMenu();
+}
